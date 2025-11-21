@@ -12,7 +12,7 @@
 
 ## Quick Start
 
-python3 yandex_entrances.py
+`python3 yandex_entrances.py`
 
 Скрипт обрабатывает `test_data.csv` и создает `yandex_results.csv` с актуальными данными из Яндекс.Карт.
 
