@@ -1,0 +1,31 @@
+# Виртуальное окружение
+.venv/
+venv/
+ENV/
+env/
+
+# Кеш Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Результаты работы скрипта (раскомментируйте, если не хотите коммитить)
+results.csv
+failures.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Переменные окружения
+.env
+.env.local
+
