@@ -28,14 +28,10 @@ class BrowserProfile:
     def get_random_profile():
         platforms = ['Windows NT 10.0; Win64; x64', 'Macintosh; Intel Mac OS X 10_15_7', 'X11; Linux x86_64']
         chrome_version = random.randint(130, 135)
-        browsers = [
-            f'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version}.0.0.0 Safari/537.36',
-            f'Gecko/20100101 Firefox/{random.randint(120, 125)}.0'
-        ]
         res_x = random.choice([1920, 1366, 1536, 2560])
         res_y = random.choice([1080, 768, 864, 1440])
         return {
-            'ua': f"Mozilla/5.0 ({random.choice(platforms)}) {random.choice(browsers)}",
+            'ua': f"Mozilla/5.0 ({random.choice(platforms)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version}.0.0.0 Safari/537.36",
             'window': f"--window-size={res_x},{res_y}",
             'lang': random.choice(['en-US,en;q=0.9', 'ru-RU,ru;q=0.9', 'de-DE,de;q=0.9'])
         }
@@ -56,17 +52,12 @@ class YandexParser:
             results = []
             seen = set()
             for item in entrances or []:
-                if 'coordinates' not in item: continue
-                name = item.get('name', None)
-                if name is None:continue
+                if 'coordinates' not in item or not item.get('name'): continue
                 coords = tuple(item['coordinates'])
-                
-                if name in seen or coords in seen: continue
-                if name: seen.add(name)
+                if coords in seen: continue
                 seen.add(coords)
-
                 results.append({
-                    'porch': name,
+                    'porch': item['name'],
                     'lat': coords[1],
                     'lon': coords[0],
                     'azimuth': item.get('azimuth')
@@ -94,14 +85,29 @@ class BrowserService:
     
     def _init_driver(self, headless):
         opts = Options()
-        if headless: opts.add_argument("--headless=new")
-        opts.add_argument(self.profile['window'])
+        
+        if headless:
+            opts.add_argument("--headless=new")
+            opts.add_argument("--disable-dev-shm-usage")
+            opts.add_argument("--no-sandbox")
+            opts.add_argument("--disable-setuid-sandbox")
+            
+            chrome_paths = ['/usr/bin/chromium-browser', '/usr/bin/chromium', '/usr/bin/google-chrome-stable', '/usr/bin/google-chrome']
+            for path in chrome_paths:
+                if os.path.exists(path) and os.access(path, os.X_OK):
+                    opts.binary_location = path
+                    break
+        else:
+            opts.add_argument(self.profile['window'])
+        
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--disable-gpu")
+        opts.add_argument("--disable-blink-features=AutomationControlled")
+        opts.add_argument("--log-level=3")
         opts.add_argument(f"user-agent={self.profile['ua']}")
         opts.add_argument(f"--lang={self.profile['lang']}")
-        for arg in ["--no-sandbox", "--disable-gpu", "--disable-blink-features=AutomationControlled", "--log-level=3"]:
-            opts.add_argument(arg)
         
-        opts.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+        opts.add_experimental_option("excludeSwitches", ["enable-automation"])
         opts.add_experimental_option("prefs", {"profile.managed_default_content_settings.images": 2})
         
         seleniumwire_options = {}
@@ -114,8 +120,14 @@ class BrowserService:
                 }
             }
         
-        service = Service(ChromeDriverManager().install())
+        system_chromedriver = '/usr/bin/chromedriver'
+        if os.path.exists(system_chromedriver) and os.access(system_chromedriver, os.X_OK):
+            service = Service(system_chromedriver)
+        else:
+            service = Service(ChromeDriverManager().install())
+        
         service.log_path = os.devnull
+        
         driver = webdriver.Chrome(service=service, options=opts, seleniumwire_options=seleniumwire_options)
         driver.execute_cdp_cmd("Network.setBlockedURLs", {"urls": ["*.png", "*.jpg", "*.gif", "*.css", "*mc.yandex.ru*"]})
         driver.execute_cdp_cmd("Network.enable", {})
@@ -129,17 +141,7 @@ class BrowserService:
         page_text = self.driver.page_source.lower()
         page_title = self.driver.title.lower()
         
-        outdated_indicators = [
-            "браузер устарел",
-            "старая версия браузера",
-            "недоступны новые функции карт",
-            "недоступны новые функции яндекс карт",
-            "попробуйте другой браузер",
-            "скачайте карты на телефон"
-        ]
-        
-        combined_text = page_text + " " + page_title
-        if any(indicator in combined_text for indicator in outdated_indicators):
+        if any(x in (page_text + " " + page_title) for x in ["браузер устарел", "старая версия браузера", "недоступны новые функции карт"]):
             return "OUTDATED"
         
         try:
@@ -182,7 +184,8 @@ class Scraper:
         with open(self.input_file, 'r', encoding='utf-8') as f:
             addresses = [line.strip() for line in f if line.strip()]
         
-        browser = BrowserService(headless=False)
+        headless = not os.getenv('DISPLAY')
+        browser = BrowserService(headless=headless)
         for i, addr in enumerate(addresses, 1):
             log.info(f"[{i}/{len(addresses)}] Processing: {addr}")
             search_url = f"https://yandex.ru/maps/?text={quote(addr)}&z=17"
@@ -192,7 +195,7 @@ class Scraper:
                 log.warning(f"{raw_json} detected, restarting browser...")
                 browser.close()
                 time.sleep(2)
-                browser = BrowserService(headless=False)
+                browser = BrowserService(headless=headless)
                 continue
             
             entrances, entrances_raw_json = YandexParser.parse_entrances(raw_json)

@@ -13,25 +13,39 @@
 
 ## Установка и запуск
 
-### 1. Создание виртуального окружения
+### Linux-сервер (Ubuntu/Debian)
 
 ```bash
+# 1. Клонируйте репозиторий
+cd ~
+git clone https://github.com/LeonidDecart/yandex-entrance-parser.git
+cd yandex-entrance-parser
+
+# 2. Установите системные зависимости
+sudo apt-get update
+sudo apt-get install -y git python3-venv python3-pip
+
+# 3. Установите Chrome (быстрее чем chromium через snap)
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo apt install -y ./google-chrome-stable_current_amd64.deb
+rm google-chrome-stable_current_amd64.deb
+
+# 4. Создайте виртуальное окружение
 python3 -m venv .venv
-source .venv/bin/activate  # Для macOS/Linux
-# или
-.venv\Scripts\activate  # Для Windows
-```
+source .venv/bin/activate
 
-### 2. Установка зависимостей
-
-```bash
+# 5. Установите Python-зависимости
+pip install --upgrade pip
+pip install setuptools
 pip install selenium selenium-wire webdriver-manager
 pip install "blinker<1.7"
 ```
 
-**Примечание:** Версия `blinker<1.7` необходима для совместимости с `selenium-wire`.
+**Важно:**
+- На Linux-сервере скрипт автоматически запускается в headless-режиме
+- Убедитесь, что версия Python >= 3.7: `python3 --version`
 
-### 3. Настройка конфигурации
+### Настройка конфигурации
 
 Настройте прокси в `config.py` (или оставьте `[None]` для работы без прокси):
 
@@ -42,7 +56,7 @@ PROXIES = [
 ]
 ```
 
-### 4. Подготовка списка адресов
+### Подготовка списка адресов
 
 Создайте файл `addresses.txt` с адресами, каждый на новой строке. 
 
@@ -54,7 +68,7 @@ PROXIES = [
 Челябинск, ул. Солнечная, д. 56
 ```
 
-### 5. Запуск скрипта
+### Запуск скрипта
 
 ```bash
 python3 yandex_entrances.py
