@@ -60,9 +60,9 @@ PROXIES = [
 python3 yandex_entrances.py
 ```
 
-Скрипт создаст:
-- `results.csv` — файл с данными подъездов (координаты, азимуты)
-- `failures.json` — файл с адресами, для которых не удалось получить данные
+Скрипт сохраняет результаты в папку `results/` по ходу обработки:
+- `YYYY-MM-DD_HH-MM-SS_results.csv` — данные подъездов (координаты, азимуты)
+- `YYYY-MM-DD_HH-MM-SS_failures.json` — адреса с ошибками
 
 ## Output Format
 

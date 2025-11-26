@@ -6,6 +6,7 @@ import logging
 import random
 import os
 from urllib.parse import quote
+from datetime import datetime
 from config import PROXIES
 
 from seleniumwire import webdriver
@@ -72,7 +73,7 @@ class YandexParser:
                 })
             return results, entrances
         except (KeyError, IndexError, json.JSONDecodeError):
-            return []
+            return [], []
 
 class BrowserService:
     _proxy_index = 0
@@ -152,22 +153,38 @@ class BrowserService:
         self.driver.quit()
 
 class Scraper:
-    def __init__(self, input_file, out_csv, out_json):
+    def __init__(self, input_file):
         self.input_file = input_file
-        self.out_csv = out_csv
-        self.out_json = out_json
+        os.makedirs('results', exist_ok=True)
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        self.out_csv = f'results/{timestamp}_results.csv'
+        self.out_json = f'results/{timestamp}_failures.json'
         self.success_data = []
         self.failed_data = []
+        self.csv_file = None
+
+    def _save(self):
+        if self.success_data:
+            if self.csv_file is None:
+                self.csv_file = open(self.out_csv, 'w', encoding='utf-8', newline='')
+                keys = self.success_data[0].keys()
+                self.csv_writer = csv.DictWriter(self.csv_file, fieldnames=keys)
+                self.csv_writer.writeheader()
+            self.csv_writer.writerows(self.success_data)
+            self.csv_file.flush()
+            self.success_data = []
+
+        if self.failed_data:
+            with open(self.out_json, 'w', encoding='utf-8') as f:
+                json.dump(self.failed_data, f, ensure_ascii=False, indent=4)
 
     def run(self):
         with open(self.input_file, 'r', encoding='utf-8') as f:
             addresses = [line.strip() for line in f if line.strip()]
         
         browser = BrowserService(headless=False)
-        i = 0
-        while i < len(addresses):
-            addr = addresses[i]
-            log.info(f"[{i+1}/{len(addresses)}] Processing: {addr}")
+        for i, addr in enumerate(addresses, 1):
+            log.info(f"[{i}/{len(addresses)}] Processing: {addr}")
             search_url = f"https://yandex.ru/maps/?text={quote(addr)}&z=17"
             raw_json = browser.get_page_json(search_url)
             
@@ -181,7 +198,7 @@ class Scraper:
             entrances, entrances_raw_json = YandexParser.parse_entrances(raw_json)
             
             if entrances:
-                print("Found "+str(len(entrances))+" entrances")
+                print(f"Found {len(entrances)} entrances")
                 for idx, ent in enumerate(entrances, 1):
                     self.success_data.append({
                         'address': addr,
@@ -200,24 +217,11 @@ class Scraper:
                     "json": json.loads(raw_json) if raw_json else None
                 })
             
-            i += 1
+            self._save()
         
         browser.close()
-        self._save_results()
-
-    def _save_results(self):
-        if self.success_data:
-            keys = self.success_data[0].keys()
-            with open(self.out_csv, 'w', encoding='utf-8', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=keys)
-                writer.writeheader()
-                writer.writerows(self.success_data)
-            log.info(f"Saved {len(self.success_data)} entrances to {self.out_csv}")
-
-        if self.failed_data:
-            with open(self.out_json, 'w', encoding='utf-8') as f:
-                json.dump(self.failed_data, f, ensure_ascii=False, indent=4)
-            log.info(f"Saved {len(self.failed_data)} failed searches to {self.out_json}")
+        if self.csv_file:
+            self.csv_file.close()
 
 if __name__ == "__main__":
-    Scraper('addresses.txt', 'results.csv', 'failures.json').run()
+    Scraper('addresses.txt').run()
