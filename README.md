@@ -72,6 +72,8 @@ python3 yandex_entrances.py
 
 CSV с полями: `fias_id`, `address`, `porch`, `lat`, `lon`, `azimuth`
 
+Для домов без подъездов сохраняется одна запись с `porch=0` и координатами дома.
+
 ## Requirements
 
 - Python 3.7+

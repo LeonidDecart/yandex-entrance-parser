@@ -42,11 +42,17 @@ def extract_json(html):
     return match.group(1) if match else None
 
 def parse_entrances(json_str):
-    if not json_str: return [], []
+    if not json_str: return [], [], None
     try:
         data = json.loads(json_str)
         items = data.get("stack", [{}])[0].get("response", {}).get("items", [])
-        if not items: return [], []
+        if not items: return [], [], None
+        
+        building_coords = None
+        if items and 'coordinates' in items[0]:
+            coords = items[0]['coordinates']
+            if coords:
+                building_coords = (coords[1], coords[0])
         
         raw_ents = items[0].get("entrances", [])
         seen = {}
@@ -61,9 +67,9 @@ def parse_entrances(json_str):
                 coords = tuple(item['coordinates'])
                 seen[porch] = Entrance(porch, coords[1], coords[0], item.get('azimuth'))
         
-        return list(seen.values()), raw_ents
+        return list(seen.values()), raw_ents, building_coords
     except Exception:
-        return [], []
+        return [], [], None
 
 class ProxyManager:
     def __init__(self):
@@ -156,7 +162,7 @@ class App:
             url = f"https://yandex.ru/maps/?text={quote(addr)}&z=17"
             
             html, final_url = self.client.get(url)
-            entrances, ents_raw = parse_entrances(extract_json(html) if html else None)
+            entrances, ents_raw, building_coords = parse_entrances(extract_json(html) if html else None)
 
             success_buf, fail_buf = [], []
             if entrances:
@@ -167,8 +173,15 @@ class App:
                             'fias_id': fias_id, 'address': addr, 'porch': ent.porch or str(idx),
                             'lat': ent.lat, 'lon': ent.lon, 'azimuth': ent.azimuth
                         })
+            elif building_coords:
+                log.info("No entrances, saving building with porch=0")
+                for fias_id in fias_ids:
+                    success_buf.append({
+                        'fias_id': fias_id, 'address': addr, 'porch': '0',
+                        'lat': building_coords[0], 'lon': building_coords[1], 'azimuth': None
+                    })
             else:
-                log.warning("No entrances found")
+                log.warning("No data found")
                 for fias_id in fias_ids:
                     fail_buf.append({
                         "fias_id": fias_id, "address": addr, "url_search": url,
